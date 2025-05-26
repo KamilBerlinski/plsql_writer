@@ -1,4 +1,5 @@
 import os
+import platform
 import shutil
 import tempfile
 import ollama
@@ -8,18 +9,29 @@ from rich.prompt import Prompt, Confirm
 
 console = Console()
 
-def summarize_sql(content):
-    prompt = f"""
-Jesteś asystentem SQL. Otrzymasz zapytanie SQL bez komentarzy.
-Twoim zadaniem jest dodać na początku pliku komentarze w języku polskim, które krótko i jasno opisują, co robi zapytanie.
-Używaj tylko komentarzy w formacie `-- komentarz`, nie używaj formatu /* ... */.
-Zwróć pełen kod SQL z dodanymi komentarzami.
 
-SQL:
-{content}
-"""
+
+def summarize_sql(content):
+    print("[DEBUG] Treść wejściowego pliku SQL:\n")
+    print(content[:500])
+    prompt = f"""
+You are an expert SQL developer.
+
+Your task is to **add English inline comments** using `--` style directly into the SQL code.
+
+📌 Guidelines:
+- DO NOT summarize the query or give feedback.
+- DO NOT write in natural language outside the SQL.
+- DO NOT change the SQL structure or logic.
+- DO ONLY return the full SQL code with inline comments added in appropriate places.
+
+Here is the SQL code:
+
+        SQL:
+        {content}
+        """
     response = ollama.chat(
-        model="mistral",
+        model= "llama3:instruct", # "mistral", 
         messages=[{"role": "user", "content": prompt}]
     )
     return response["message"]["content"]
@@ -50,8 +62,12 @@ def open_editor_with_content(content):
 
 def process_file(file_path):
     console.print(f"\n[bold yellow]Plik:[/bold yellow] {file_path}")
-    with open(file_path, 'r', encoding='utf-8') as f:
-        content = f.read()
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+    except UnicodeDecodeError:
+        with open(file_path, 'r', encoding='cp1250') as f:
+            content = f.read()
 
     try:
         commented_sql = summarize_sql(content)
@@ -86,6 +102,12 @@ def process_file(file_path):
     except Exception as e:
         console.print(f"[red]Błąd przetwarzania pliku {file_path}: {e}[/red]")
 
+def clear_terminal():
+    if platform.system() == "Windows":
+        os.system('cls')
+    else:
+        os.system('clear')
+
 def main():
     folder = Prompt.ask("Podaj ścieżkę do folderu z plikami SQL", default= r"..\sql\to_do")
     if not os.path.exists(folder):
@@ -99,6 +121,7 @@ def main():
 
     for file_name in sql_files:
         process_file(os.path.join(folder, file_name))
+        #clear_terminal()
 
 if __name__ == "__main__":
     main()
